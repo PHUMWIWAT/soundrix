@@ -1,6 +1,7 @@
 mod audio;
 mod commands;
 mod decode;
+mod shortcuts;
 
 use std::sync::Mutex;
 
@@ -10,6 +11,11 @@ use tauri::Manager;
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(shortcuts::on_shortcut)
+                .build(),
+        )
         .setup(|app| {
             let library = commands::open_library(app.handle())
                 .map_err(|error| std::io::Error::other(error))?;
@@ -17,6 +23,10 @@ pub fn run() {
                 .map_err(|error| std::io::Error::other(error))?;
             app.manage(library);
             app.manage(audio::AudioState(Mutex::new(engine)));
+            let handle = app.handle().clone();
+            std::thread::spawn(move || {
+                let _ = shortcuts::sync(&handle);
+            });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -29,6 +39,7 @@ pub fn run() {
             commands::remove_playlist,
             commands::move_sound,
             commands::remove_sound,
+            commands::set_shortcut,
             commands::add_to_playlist,
             commands::remove_from_playlist,
             commands::audio_status,

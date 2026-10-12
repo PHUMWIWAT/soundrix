@@ -21,6 +21,7 @@ soundrix-core = { path = "../crates/soundrix-core" }
 symphonia = { version = "0.6.1", features = ["mp3", "flac", "wav", "ogg", "pcm", "vorbis", "isomp4", "aac", "alac"] }
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
+tauri-plugin-global-shortcut = "2.4.1"
 
 [profile.release]
 codegen-units = 1

@@ -5,6 +5,7 @@ export type Sound = {
   name: string;
   path: string;
   categoryId: string;
+  shortcut: string;
 };
 
 export type Category = {
@@ -64,6 +65,10 @@ export function moveSound(soundId: string, categoryId: string): Promise<Library>
 
 export function removeSound(soundId: string): Promise<Library> {
   return invoke<Library>("remove_sound", { soundId });
+}
+
+export function setShortcut(soundId: string, shortcut: string): Promise<Library> {
+  return invoke<Library>("set_shortcut", { soundId, shortcut });
 }
 
 export function addToPlaylist(playlistId: string, soundId: string): Promise<Library> {

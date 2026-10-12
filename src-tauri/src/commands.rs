@@ -8,7 +8,7 @@ use soundrix_core::{AppLibrary, Library};
 use crate::audio::{self, AudioState, AudioStatus};
 use crate::decode;
 
-pub(crate) struct LibraryState(Mutex<AppLibrary>);
+pub(crate) struct LibraryState(pub(crate) Mutex<AppLibrary>);
 
 pub(crate) fn open_library(app: &AppHandle) -> Result<LibraryState, String> {
     let dir = app.path().app_data_dir().map_err(|error| error.to_string())?;
@@ -122,14 +122,59 @@ pub fn move_sound(
 }
 
 #[tauri::command]
-pub fn remove_sound(state: State<'_, LibraryState>, sound_id: String) -> Result<Library, String> {
-    with_library(&state, |library| {
+pub async fn remove_sound(
+    app: AppHandle,
+    state: State<'_, LibraryState>,
+    sound_id: String,
+) -> Result<Library, String> {
+    let library = with_library(&state, |library| {
         library
             .library_mut()
             .remove_sound(&sound_id)
             .map_err(|error| error.to_string())?;
         Ok(snapshot(library))
-    })
+    })?;
+    crate::shortcuts::sync(&app)?;
+    Ok(library)
+}
+
+#[tauri::command]
+pub async fn set_shortcut(
+    app: AppHandle,
+    state: State<'_, LibraryState>,
+    sound_id: String,
+    shortcut: String,
+) -> Result<Library, String> {
+    let shortcut = crate::shortcuts::canonical(&shortcut)?;
+    let previous = {
+        let library = state.0.lock().map_err(|error| error.to_string())?;
+        library
+            .library()
+            .sounds
+            .iter()
+            .find(|sound| sound.id == sound_id)
+            .map(|sound| sound.shortcut.clone())
+            .ok_or_else(|| "That sound is no longer in the library.".to_string())?
+    };
+    let saved = with_library(&state, |library| {
+        library
+            .library_mut()
+            .set_shortcut(&sound_id, &shortcut)
+            .map_err(|error| error.to_string())?;
+        Ok(snapshot(library))
+    })?;
+    if let Err(error) = crate::shortcuts::sync(&app) {
+        let _ = with_library(&state, |library| {
+            library
+                .library_mut()
+                .set_shortcut(&sound_id, &previous)
+                .map_err(|error| error.to_string())?;
+            Ok(())
+        });
+        let _ = crate::shortcuts::sync(&app);
+        return Err(error);
+    }
+    Ok(saved)
 }
 
 #[tauri::command]
@@ -179,14 +224,13 @@ pub fn set_audio(
     engine.apply(audio::parse_mode(&mode)?, speaker_device, mic_device)
 }
 
-#[tauri::command]
-pub async fn play_sound(
-    library: State<'_, LibraryState>,
-    audio: State<'_, AudioState>,
+pub async fn play_saved(
+    app: &AppHandle,
     id: String,
     mode: Option<String>,
 ) -> Result<AudioStatus, String> {
     let path = {
+        let library = app.state::<LibraryState>();
         let library = library.0.lock().map_err(|error| error.to_string())?;
         library
             .library()
@@ -199,6 +243,7 @@ pub async fn play_sound(
     let pcm = tauri::async_runtime::spawn_blocking(move || decode::decode_file(Path::new(&path)))
         .await
         .map_err(|error| error.to_string())??;
+    let audio = app.state::<AudioState>();
     let mut engine = audio.0.lock().map_err(|error| error.to_string())?;
     let route = match mode {
         Some(mode) => audio::parse_mode(&mode)?,
@@ -206,6 +251,15 @@ pub async fn play_sound(
     };
     engine.play(pcm, id, route)?;
     Ok(engine.status())
+}
+
+#[tauri::command]
+pub async fn play_sound(
+    app: AppHandle,
+    id: String,
+    mode: Option<String>,
+) -> Result<AudioStatus, String> {
+    play_saved(&app, id, mode).await
 }
 
 #[tauri::command]

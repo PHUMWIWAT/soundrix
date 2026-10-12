@@ -22,6 +22,8 @@ pub enum LibraryError {
     EmptyName,
     #[error("keep at least one category")]
     LastCategory,
+    #[error("that shortcut is already used")]
+    ShortcutTaken,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -31,6 +33,8 @@ pub struct Sound {
     pub name: String,
     pub path: String,
     pub category_id: String,
+    #[serde(default)]
+    pub shortcut: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -149,10 +153,29 @@ impl Library {
                 name,
                 path: text,
                 category_id: category_id.to_string(),
+                shortcut: String::new(),
             });
             added += 1;
         }
         Ok(added)
+    }
+
+    pub fn set_shortcut(&mut self, sound_id: &str, shortcut: &str) -> Result<(), LibraryError> {
+        let shortcut = shortcut.trim().to_string();
+        if !shortcut.is_empty()
+            && self.sounds.iter().any(|sound| {
+                sound.id != sound_id && sound.shortcut.eq_ignore_ascii_case(&shortcut)
+            })
+        {
+            return Err(LibraryError::ShortcutTaken);
+        }
+        let sound = self
+            .sounds
+            .iter_mut()
+            .find(|sound| sound.id == sound_id)
+            .ok_or(LibraryError::UnknownSound)?;
+        sound.shortcut = shortcut;
+        Ok(())
     }
 
     pub fn move_sound(&mut self, sound_id: &str, category_id: &str) -> Result<(), LibraryError> {
@@ -352,12 +375,14 @@ mod tests {
             name: "Air Horn".into(),
             path: "a.wav".into(),
             category_id: library_id,
+            shortcut: String::new(),
         });
         library.sounds.push(Sound {
             id: "s2".into(),
             name: "horn solo".into(),
             path: "b.wav".into(),
             category_id: memes.clone(),
+            shortcut: String::new(),
         });
         let hits = library.matching("HORN", Some(&memes));
         assert_eq!(hits.len(), 1);
@@ -374,6 +399,7 @@ mod tests {
             name: "Hit".into(),
             path: "hit.wav".into(),
             category_id: extra.clone(),
+            shortcut: String::new(),
         });
         library.remove_category(&extra).expect("remove");
         assert_eq!(library.sounds[0].category_id, original);
@@ -388,6 +414,7 @@ mod tests {
             name: "Hit".into(),
             path: "hit.wav".into(),
             category_id: library.categories[0].id.clone(),
+            shortcut: String::new(),
         });
         let playlist = library.add_playlist("Warmup").expect("playlist");
         library.add_to_playlist(&playlist, "s1").expect("add");
@@ -395,6 +422,30 @@ mod tests {
         assert_eq!(library.playlists[0].sound_ids.len(), 1);
         library.remove_sound("s1").expect("remove sound");
         assert!(library.playlists[0].sound_ids.is_empty());
+    }
+
+    #[test]
+    fn set_shortcut_should_reject_a_key_already_used_by_another_sound() {
+        let mut library = Library::new();
+        library.sounds.push(Sound {
+            id: "s1".into(),
+            name: "Hit".into(),
+            path: "a.wav".into(),
+            category_id: library.categories[0].id.clone(),
+            shortcut: String::new(),
+        });
+        library.sounds.push(Sound {
+            id: "s2".into(),
+            name: "Horn".into(),
+            path: "b.wav".into(),
+            category_id: library.categories[0].id.clone(),
+            shortcut: String::new(),
+        });
+        library.set_shortcut("s1", "Ctrl+Shift+K").expect("first key");
+        let taken = library.set_shortcut("s2", "ctrl+shift+k");
+        assert!(matches!(taken, Err(LibraryError::ShortcutTaken)));
+        library.set_shortcut("s1", "").expect("clear");
+        assert!(library.sounds[0].shortcut.is_empty());
     }
 
     #[test]

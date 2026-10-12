@@ -17,6 +17,7 @@ import {
   removeFromPlaylist,
   removePlaylist,
   removeSound,
+  setShortcut,
   type Library,
 } from "./library";
 import "./theme.css";
@@ -32,6 +33,7 @@ function App() {
   const [playlistName, setPlaylistName] = useState("");
   const [hot, setHot] = useState(false);
   const [audio, setAudio] = useState<AudioStatus | null>(null);
+  const [binding, setBinding] = useState<string | null>(null);
   const libraryRef = useRef(library);
   const categoryRef = useRef(categoryId);
   libraryRef.current = library;
@@ -74,6 +76,42 @@ function App() {
       unlisten?.();
     };
   }, []);
+
+  useEffect(() => {
+    if (!binding) {
+      return;
+    }
+    const soundId = binding;
+    async function assign(shortcut: string) {
+      setError("");
+      try {
+        setLibrary(await setShortcut(soundId, shortcut));
+      } catch (caught) {
+        setError(message(caught));
+      }
+    }
+    function onKey(event: KeyboardEvent) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.key === "Escape") {
+        setBinding(null);
+        return;
+      }
+      if (event.key === "Backspace" || event.key === "Delete") {
+        setBinding(null);
+        void assign("");
+        return;
+      }
+      const shortcut = accelerator(event);
+      if (!shortcut) {
+        return;
+      }
+      setBinding(null);
+      void assign(shortcut);
+    }
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [binding]);
 
   useEffect(() => {
     if (!inTauri()) {
@@ -365,6 +403,17 @@ function App() {
                     <span>{sound.path}</span>
                   </div>
                   <div className="line">
+                    <button
+                      type="button"
+                      className={binding === sound.id ? "key selected" : "key"}
+                      aria-label={`Shortcut for ${sound.name}`}
+                      title="Click, then press a shortcut. Backspace clears it."
+                      onClick={() =>
+                        setBinding((current) => (current === sound.id ? null : sound.id))
+                      }
+                    >
+                      {binding === sound.id ? "Press" : shortcutLabel(sound.shortcut)}
+                    </button>
                     <button type="button" onClick={() => void play(sound.id)}>
                       Play
                     </button>
@@ -417,6 +466,47 @@ function App() {
       </div>
     </main>
   );
+}
+
+function accelerator(event: KeyboardEvent): string | null {
+  if (event.repeat || event.key === "Control" || event.key === "Shift" || event.key === "Alt" || event.key === "Meta") {
+    return null;
+  }
+  const parts: string[] = [];
+  if (event.ctrlKey || event.metaKey) {
+    parts.push("Control");
+  }
+  if (event.altKey) {
+    parts.push("Alt");
+  }
+  if (event.shiftKey) {
+    parts.push("Shift");
+  }
+  if (!event.code) {
+    return null;
+  }
+  parts.push(event.code);
+  return parts.join("+");
+}
+
+function shortcutLabel(shortcut: string): string {
+  if (!shortcut) {
+    return "Key";
+  }
+  return shortcut
+    .split("+")
+    .map((part) => {
+      if (part === "control") return "Ctrl";
+      if (part === "shift") return "Shift";
+      if (part === "alt") return "Alt";
+      if (part === "super") return "Win";
+      if (part.startsWith("Key") && part.length === 4) return part.slice(3);
+      if (part.startsWith("Digit")) return part.slice(5);
+      if (part.startsWith("Numpad")) return `Num ${part.slice(6)}`;
+      if (part.startsWith("Arrow")) return part.slice(5);
+      return part;
+    })
+    .join("+");
 }
 
 function routeLine(mode: PlayMode | undefined): string {

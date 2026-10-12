@@ -23,6 +23,8 @@ Soundrix keeps a library of audio files and plays them into the apps you already
 
 A playing row is marked with a red edge. Sounds can overlap.
 
+Each sound has a **Key** button. Click it, then press the shortcut. Function keys can stand alone. Any other key needs Ctrl, Alt, or Shift. Backspace clears the shortcut, and Escape cancels. The shortcut works while Soundrix is in the background and plays with the current mode.
+
 ## Microphone setup
 
 Soundrix does not install a driver and does not write into a capture device. The microphone output is a playback device you choose, usually a virtual cable.
