@@ -1,0 +1,4 @@
+[target.x86_64-pc-windows-gnu]
+# The repo path contains square brackets. GNU ld then misreads the export
+# definition and fails with "export ordinal too large". Skip those exports.
+rustflags = ["-C", "link-arg=-Wl,--exclude-all-symbols"]
