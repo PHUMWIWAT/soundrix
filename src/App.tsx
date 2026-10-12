@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open } from "@tauri-apps/plugin-dialog";
-import logo from "../assets/soundrix-logo.jpg";
+import logo from "../assets/Glossy Red Soundwave Logo.png";
 import { loadAudio, playSound, saveAudio, stopSounds, type AudioStatus, type PlayMode } from "./audio";
 import {
   AUDIO_EXTENSIONS,

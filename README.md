@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/soundrix-logo.png" alt="Soundrix" width="168">
+  <img src="assets/Glossy Red Soundwave Logo.png" alt="Soundrix" width="168">
 </p>
 
 <h1 align="center">Soundrix</h1>
@@ -76,4 +76,4 @@ cargo test --manifest-path crates/soundrix-core/Cargo.toml
 | `src/` | React interface |
 | `src-tauri/` | Tauri app, device playback, and file decoding |
 | `crates/soundrix-core/` | Library model and mixer |
-| `assets/soundrix-logo.png` | App mark |
+| `assets/Glossy Red Soundwave Logo.png` | App mark |

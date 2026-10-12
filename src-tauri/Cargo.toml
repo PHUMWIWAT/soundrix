@@ -1,6 +1,6 @@
 [package]
 name = "soundrix"
-version = "0.1.0"
+version = "0.1.1"
 description = "Desktop soundboard"
 authors = ["PHUMWIWAT"]
 edition = "2024"
