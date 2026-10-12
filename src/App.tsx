@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open } from "@tauri-apps/plugin-dialog";
 import logo from "../assets/soundrix-logo.jpg";
+import { loadAudio, playSound, saveAudio, stopSounds, type AudioStatus, type PlayMode } from "./audio";
 import {
   AUDIO_EXTENSIONS,
   addCategory,
@@ -30,6 +31,7 @@ function App() {
   const [categoryName, setCategoryName] = useState("");
   const [playlistName, setPlaylistName] = useState("");
   const [hot, setHot] = useState(false);
+  const [audio, setAudio] = useState<AudioStatus | null>(null);
   const libraryRef = useRef(library);
   const categoryRef = useRef(categoryId);
   libraryRef.current = library;
@@ -43,12 +45,13 @@ function App() {
     let alive = true;
     void (async () => {
       try {
-        const [next, note] = await Promise.all([loadLibrary(), loadWarning()]);
+        const [next, note, playback] = await Promise.all([loadLibrary(), loadWarning(), loadAudio()]);
         if (!alive) {
           return;
         }
         setLibrary(next);
         setWarning(note ?? "");
+        setAudio(playback);
         const webview = getCurrentWebview();
         unlisten = await webview.onDragDropEvent((event) => {
           if (event.payload.type === "enter") {
@@ -72,6 +75,16 @@ function App() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!inTauri()) {
+      return;
+    }
+    const timer = window.setInterval(() => {
+      void loadAudio().then(setAudio).catch(() => undefined);
+    }, 400);
+    return () => window.clearInterval(timer);
+  }, []);
+
   async function acceptPaths(paths: string[]) {
     const current = libraryRef.current;
     if (!current || paths.length === 0) {
@@ -84,6 +97,29 @@ function App() {
       return;
     }
     await run(() => importPaths(paths, target));
+  }
+
+  async function play(id: string, mode?: PlayMode) {
+    setError("");
+    try {
+      setAudio(await playSound(id, mode));
+    } catch (caught) {
+      setError(message(caught));
+    }
+  }
+
+  async function apply(mode: PlayMode, speakerChoice: string, micChoice: string) {
+    setError("");
+    try {
+      setAudio(await saveAudio(mode, speakerChoice, micChoice));
+    } catch (caught) {
+      setError(message(caught));
+      try {
+        setAudio(await loadAudio());
+      } catch {
+        return;
+      }
+    }
   }
 
   async function run(action: () => Promise<Library>) {
@@ -135,7 +171,7 @@ function App() {
         <img className="mark" src={logo} alt="" />
         <div>
           <h1>Soundrix</h1>
-          <p>Soundboard</p>
+          <p>{routeLine(audio?.mode)}</p>
         </div>
       </header>
       <div className="workspace">
@@ -239,6 +275,80 @@ function App() {
               Add folder
             </button>
           </div>
+          {audio && (
+            <div className="playbar">
+              <div className="modes">
+                <button
+                  type="button"
+                  aria-pressed={audio.mode === "both"}
+                  className={audio.mode === "both" ? "selected" : ""}
+                  onClick={() => void apply("both", audio.speakerChoice, audio.micChoice)}
+                >
+                  Both
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={audio.mode === "speakers"}
+                  className={audio.mode === "speakers" ? "selected" : ""}
+                  onClick={() => void apply("speakers", audio.speakerChoice, audio.micChoice)}
+                >
+                  Speakers
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={audio.mode === "microphone"}
+                  className={audio.mode === "microphone" ? "selected" : ""}
+                  onClick={() => void apply("microphone", audio.speakerChoice, audio.micChoice)}
+                >
+                  Microphone
+                </button>
+              </div>
+              <label>
+                Speakers
+                <select
+                  aria-label="Speaker output"
+                  value={audio.speakerChoice}
+                  onChange={(event) =>
+                    void apply(audio.mode, event.currentTarget.value, audio.micChoice)
+                  }
+                >
+                  <option value="">Default</option>
+                  {deviceOptions(audio.devices, audio.speakerChoice).map((device) => (
+                    <option key={device} value={device}>
+                      {device}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Microphone
+                <select
+                  aria-label="Microphone output"
+                  value={audio.micChoice}
+                  onChange={(event) =>
+                    void apply(audio.mode, audio.speakerChoice, event.currentTarget.value)
+                  }
+                >
+                  <option value="">Auto (VB-Cable)</option>
+                  {deviceOptions(audio.devices, audio.micChoice).map((device) => (
+                    <option key={device} value={device}>
+                      {device}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                onClick={() => {
+                  setError("");
+                  void stopSounds().then(setAudio).catch((caught) => setError(message(caught)));
+                }}
+              >
+                Stop
+              </button>
+            </div>
+          )}
+          {audio?.hint && <p className="note">{audio.hint}</p>}
           {warning && <p className="note">{warning}</p>}
           {error && <p className="note">{error}</p>}
           {sounds.length === 0 ? (
@@ -246,12 +356,24 @@ function App() {
           ) : (
             <ul className="sounds">
               {sounds.map((sound) => (
-                <li key={sound.id}>
-                  <div>
+                <li
+                  key={sound.id}
+                  className={audio?.playing.includes(sound.id) ? "playing" : ""}
+                >
+                  <div onDoubleClick={() => void play(sound.id)}>
                     <strong>{sound.name}</strong>
                     <span>{sound.path}</span>
                   </div>
                   <div className="line">
+                    <button type="button" onClick={() => void play(sound.id)}>
+                      Play
+                    </button>
+                    <button type="button" onClick={() => void play(sound.id, "speakers")}>
+                      Speakers
+                    </button>
+                    <button type="button" onClick={() => void play(sound.id, "microphone")}>
+                      Mic
+                    </button>
                     <select
                       aria-label={`Category for ${sound.name}`}
                       value={sound.categoryId}
@@ -295,6 +417,23 @@ function App() {
       </div>
     </main>
   );
+}
+
+function routeLine(mode: PlayMode | undefined): string {
+  if (mode === "speakers") {
+    return "Speakers";
+  }
+  if (mode === "microphone") {
+    return "Microphone";
+  }
+  return "Speakers and microphone";
+}
+
+function deviceOptions(devices: string[], selected: string): string[] {
+  if (selected !== "" && !devices.includes(selected)) {
+    return [selected, ...devices];
+  }
+  return devices;
 }
 
 function message(caught: unknown): string {

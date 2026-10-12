@@ -1,4 +1,8 @@
+mod audio;
 mod commands;
+mod decode;
+
+use std::sync::Mutex;
 
 use tauri::Manager;
 
@@ -9,7 +13,10 @@ pub fn run() {
         .setup(|app| {
             let library = commands::open_library(app.handle())
                 .map_err(|error| std::io::Error::other(error))?;
+            let engine = audio::Engine::open(app.handle())
+                .map_err(|error| std::io::Error::other(error))?;
             app.manage(library);
+            app.manage(audio::AudioState(Mutex::new(engine)));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -24,6 +31,10 @@ pub fn run() {
             commands::remove_sound,
             commands::add_to_playlist,
             commands::remove_from_playlist,
+            commands::audio_status,
+            commands::set_audio,
+            commands::play_sound,
+            commands::stop_sounds,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

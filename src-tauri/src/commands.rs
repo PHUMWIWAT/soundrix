@@ -1,8 +1,12 @@
+use std::path::Path;
 use std::sync::Mutex;
 
 use tauri::{AppHandle, Manager, State};
 
 use soundrix_core::{AppLibrary, Library};
+
+use crate::audio::{self, AudioState, AudioStatus};
+use crate::decode;
 
 pub(crate) struct LibraryState(Mutex<AppLibrary>);
 
@@ -156,4 +160,57 @@ pub fn remove_from_playlist(
             .map_err(|error| error.to_string())?;
         Ok(snapshot(library))
     })
+}
+
+#[tauri::command]
+pub fn audio_status(audio: State<'_, AudioState>) -> Result<AudioStatus, String> {
+    let mut engine = audio.0.lock().map_err(|error| error.to_string())?;
+    Ok(engine.status())
+}
+
+#[tauri::command]
+pub fn set_audio(
+    audio: State<'_, AudioState>,
+    mode: String,
+    speaker_device: String,
+    mic_device: String,
+) -> Result<AudioStatus, String> {
+    let mut engine = audio.0.lock().map_err(|error| error.to_string())?;
+    engine.apply(audio::parse_mode(&mode)?, speaker_device, mic_device)
+}
+
+#[tauri::command]
+pub async fn play_sound(
+    library: State<'_, LibraryState>,
+    audio: State<'_, AudioState>,
+    id: String,
+    mode: Option<String>,
+) -> Result<AudioStatus, String> {
+    let path = {
+        let library = library.0.lock().map_err(|error| error.to_string())?;
+        library
+            .library()
+            .sounds
+            .iter()
+            .find(|sound| sound.id == id)
+            .map(|sound| sound.path.clone())
+            .ok_or_else(|| "That sound is no longer in the library.".to_string())?
+    };
+    let pcm = tauri::async_runtime::spawn_blocking(move || decode::decode_file(Path::new(&path)))
+        .await
+        .map_err(|error| error.to_string())??;
+    let mut engine = audio.0.lock().map_err(|error| error.to_string())?;
+    let route = match mode {
+        Some(mode) => audio::parse_mode(&mode)?,
+        None => engine.status().mode,
+    };
+    engine.play(pcm, id, route)?;
+    Ok(engine.status())
+}
+
+#[tauri::command]
+pub fn stop_sounds(audio: State<'_, AudioState>) -> Result<AudioStatus, String> {
+    let mut engine = audio.0.lock().map_err(|error| error.to_string())?;
+    engine.stop();
+    Ok(engine.status())
 }

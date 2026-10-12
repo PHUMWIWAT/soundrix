@@ -125,6 +125,7 @@ button.selected {
 
 .line {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
@@ -156,6 +157,33 @@ button.selected {
   flex: 1;
 }
 
+.playbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: end;
+  padding: 0 14px 14px;
+}
+
+.modes {
+  display: flex;
+  gap: 8px;
+}
+
+.playbar label {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 180px;
+  color: #bdbdbd;
+  font-size: 12px;
+}
+
+.playbar select {
+  width: 100%;
+}
+
 .note,
 .empty {
   margin: 0;
@@ -183,6 +211,10 @@ button.selected {
   gap: 12px;
   padding: 10px 0;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.sounds li.playing {
+  box-shadow: inset 3px 0 0 #b71c1c;
 }
 
 .sounds strong,
